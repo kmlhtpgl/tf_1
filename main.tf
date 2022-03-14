@@ -227,35 +227,7 @@ resource "aws_security_group" "elb-sg" {
   }
 }
 
-resource "aws_autoscaling_group" "asg1" {
-  launch_configuration = aws_launch_configuration.asg-launch-config-sample.id
-  min_size             = var.min_size
-  max_size             = var.max_size
-  desired_capacity     = var.desired_capacity
-  vpc_zone_identifier  = [for subnet in aws_subnet.private_subnets : subnet.id]
-  health_check_grace_period = 300
-  health_check_type    = "EC2"
-  force_delete              = true
-  target_group_arns         = [aws_lb_target_group.example-tg.arn]
-  initial_lifecycle_hook {
-    name                 = "foobar"
-    default_result       = "CONTINUE"
-    heartbeat_timeout    = 2000
-    lifecycle_transition = "autoscaling:EC2_INSTANCE_LAUNCHING"
 
-    notification_metadata = <<EOF
-      {
-        "foo": "bar"
-      }
-    EOF
-  }
-
-  tag {
-    key                 = "Name"
-    value               = "${var.cluster_name}-asg"
-    propagate_at_launch = true
-  }
-}
 #Webserver
 resource "aws_lb" "sample" {
   name               = "${var.cluster_name}-asg-elb"
@@ -267,11 +239,12 @@ resource "aws_lb" "sample" {
 
 resource "aws_lb_target_group" "example-tg" {
    health_check {
-    protocol            = "HTTP"
-    interval            = 30
-    timeout             = 3
+    path                = "/" 
+    interval            = 200
+    timeout             = 60
     healthy_threshold   = 2
-    unhealthy_threshold = 2
+    unhealthy_threshold = 5
+    matcher             = "200,301,302" 
   }
    name     = "example-tg"
    port     = 80
@@ -293,4 +266,38 @@ resource "aws_lb_listener" "my-test-alb-listner" {
     type             = "forward"
     target_group_arn = "${aws_lb_target_group.example-tg.arn}"
   }
+}
+
+resource "aws_autoscaling_group" "asg1" {
+  launch_configuration = aws_launch_configuration.asg-launch-config-sample.id
+  min_size             = var.min_size
+  max_size             = var.max_size
+  desired_capacity     = var.desired_capacity
+  vpc_zone_identifier  = [for subnet in aws_subnet.private_subnets : subnet.id]
+  health_check_grace_period = 300
+  health_check_type    = "EC2"
+  force_delete              = true
+  target_group_arns         = [aws_lb_target_group.example-tg.arn]
+  initial_lifecycle_hook {
+    name                 = "foobar"
+    default_result       = "CONTINUE"
+    heartbeat_timeout    = 30
+    lifecycle_transition = "autoscaling:EC2_INSTANCE_LAUNCHING"
+
+    notification_metadata = <<EOF
+      {
+        "foo": "bar"
+      }
+    EOF
+
+  }
+
+  tag {
+    key                 = "Name"
+    value               = "${var.cluster_name}-asg"
+    propagate_at_launch = true
+  }
+  depends_on = [
+    aws_lb_target_group.example-tg
+  ]
 }
